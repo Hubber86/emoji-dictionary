@@ -1,0 +1,34 @@
+ 
+services:
+  # 🌐 Frontend (React/Vite/Next.js)
+  - type: web
+    name: emoji-frontend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview -- --port 10000
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: emoji-backend
+          property: host
+
+  # ⚙️ Backend (FastAPI)
+  - type: web
+    name: emoji-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: phoenix-miracle
+          property: connectionString
+
+databases:
+  - name: phoenix-miracle
+    databaseName: phoenix_miracle
+    user: phoenix_miracle_user
+    plan: free
