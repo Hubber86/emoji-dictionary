@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 import os
 from urllib.parse import urlparse
@@ -9,13 +10,27 @@ load_dotenv()
 
 app = FastAPI()
 
+# ✅ CORS settings
+origins = [
+    "https://emoji-dictionary-1.onrender.com",  # your frontend URL
+    "http://localhost:5173",                   # optional: local dev
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Database connection function
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         raise Exception("DATABASE_URL not set in environment")
 
     result = urlparse(db_url)
-
     return psycopg2.connect(
         database=result.path[1:],  # strip leading "/"
         user=result.username,
@@ -24,10 +39,12 @@ def get_db_connection():
         port=result.port
     )
 
+# Root route
 @app.get("/")
 def home():
-    return {"message": "API running locally 🚀"}
+    return {"message": "API running 🚀"}
 
+# Emoji lookup route
 @app.get("/emoji")
 def get_emoji(word: str):
     conn = get_db_connection()
@@ -36,6 +53,7 @@ def get_emoji(word: str):
     result = cur.fetchone()
     cur.close()
     conn.close()
+    
     if result:
         return {"word": word, "emoji": result[0]}
     return {"error": "Not found"}
