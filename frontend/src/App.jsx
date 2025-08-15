@@ -13,7 +13,8 @@ function App() {
     }
 
     try {
-      const res = await fetch(`https://emoji-backend.onrender.com/emoji?word=${word}`);
+      // const res = await fetch(`https://emoji-backend.onrender.com/emoji?word=${word}`);
+      const res = await fetch(`https://emoji-dictionary.onrender.com/emoji?word=${word}`);
       if (!res.ok) throw new Error("Emoji not found");
       const data = await res.json();
       setEmoji(data.emoji || "❓");
