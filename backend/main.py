@@ -46,27 +46,32 @@ def home():
 
 # Emoji lookup route (supports word OR category)
 # Emoji lookup route (supports word OR category, with normalization)
+# Emoji lookup route (Search button)
 @app.get("/emoji")
 def get_emoji(word: str):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Normalize input
-    q = word.strip().lower().rstrip("s")
-    q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
-    q_joined = "_".join(q.split())     # "tajmahal" → "taj_mahal"
+    # Split by commas (e.g., "cat,dog")
+    queries = [q.strip().lower().rstrip("s") for q in word.split(",") if q.strip()]
+    conditions = []
+    params = []
 
-    cur.execute("""
+    for q in queries:
+        q_space = q.replace(" ", "_")       # gateway of india → gateway_of_india
+        q_joined = "_".join(q.split())      # tajmahal → taj_mahal
+
+        conditions.append("(word ILIKE %s OR category ILIKE %s OR word ILIKE %s OR category ILIKE %s OR word ILIKE %s OR category ILIKE %s)")
+        params.extend([f"%{q}%", f"%{q}%", f"%{q_space}%", f"%{q_space}%", f"%{q_joined}%", f"%{q_joined}%"])
+
+    sql = f"""
         SELECT word, emoji, category
         FROM emojis
-        WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
-           OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
-        LIMIT 50;
-    """, (
-        f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
-        f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
-    ))
+        WHERE {" OR ".join(conditions)}
+        LIMIT 100;
+    """
 
+    cur.execute(sql, params)
     results = cur.fetchall()
     cur.close()
     conn.close()
