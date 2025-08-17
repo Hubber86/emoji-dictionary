@@ -45,39 +45,34 @@ def home():
     return {"message": "API running 🚀"}
 
 # Emoji lookup route (supports word OR category)
+# Emoji lookup route (supports word OR category, with normalization)
 @app.get("/emoji")
 def get_emoji(word: str):
-    if not word:
-        return {"results": []}
-
     conn = get_db_connection()
     cur = conn.cursor()
 
     # Normalize input
-    queries = [q.strip().lower().rstrip("s").replace(" ", "_") for q in word.split(",")]
+    q = word.strip().lower().rstrip("s")
+    q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
+    q_joined = "_".join(q.split())     # "tajmahal" → "taj_mahal"
 
-    results = []
-    for q in queries:
-        cur.execute("""
-            SELECT word, emoji, category
-            FROM emojis
-            WHERE word ILIKE %s OR category ILIKE %s;
-        """, (f"%{q}%", f"%{q}%"))
-        results.extend(cur.fetchall())
+    cur.execute("""
+        SELECT word, emoji, category
+        FROM emojis
+        WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
+           OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
+        LIMIT 50;
+    """, (
+        f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
+        f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
+    ))
 
+    results = cur.fetchall()
     cur.close()
     conn.close()
 
-    # Deduplicate results
-    seen = set()
-    unique_results = []
-    for r in results:
-        if (r[0], r[1]) not in seen:
-            seen.add((r[0], r[1]))
-            unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
-
-    if unique_results:
-        return {"results": unique_results}
+    if results:
+        return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
     return {"error": "Not found"}
 
 # 🔎 Autocomplete search
