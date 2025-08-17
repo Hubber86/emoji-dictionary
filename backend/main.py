@@ -78,19 +78,38 @@ def search_emojis(query: str):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Handle plurals (simple heuristic: strip trailing 's')
-    singular = query.lower().rstrip("s")
+    # Split by comma/space → handle multiple queries
+    terms = [t.strip().lower() for t in query.replace("_", " ").split(",") if t.strip()]
+    results = []
 
-    # Match words or categories
-    cur.execute("""
-        SELECT word, emoji, category
-        FROM emojis
-        WHERE word ILIKE %s OR category ILIKE %s
-        LIMIT 20;
-    """, (f"%{singular}%", f"%{singular}%"))
-    
-    results = cur.fetchall()
+    for term in terms:
+        # Normalize: remove spaces for looser match
+        normalized = term.replace(" ", "")
+
+        # Handle plurals: strip "s" or "es"
+        if normalized.endswith("es"):
+            singular = normalized[:-2]
+        elif normalized.endswith("s"):
+            singular = normalized[:-1]
+        else:
+            singular = normalized
+
+        cur.execute("""
+            SELECT word, emoji, category
+            FROM emojis
+            WHERE REPLACE(word, ' ', '') ILIKE %s
+               OR REPLACE(word, '_', '') ILIKE %s
+               OR REPLACE(category, ' ', '') ILIKE %s
+               OR REPLACE(category, '_', '') ILIKE %s
+            LIMIT 50;
+        """, (f"%{singular}%", f"%{singular}%", f"%{singular}%", f"%{singular}%"))
+
+        rows = cur.fetchall()
+        for r in rows:
+            result_obj = {"word": r[0], "emoji": r[1], "category": r[2]}
+            if result_obj not in results:  # dedupe
+                results.append(result_obj)
+
     cur.close()
     conn.close()
-
-    return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
+    return {"results": results}
