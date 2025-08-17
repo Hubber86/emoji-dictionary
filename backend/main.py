@@ -5,7 +5,13 @@ import os
 
 app = FastAPI()
 
-# Allow frontend access
+# ✅ Allowed frontend origins
+origins = [
+    "https://emoji-dictionary-1.onrender.com",  # deployed frontend
+    "http://localhost:5173",                    # local dev
+]
+
+# ✅ Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -14,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DB connection
+# ✅ Database connection
 def get_db_connection():
     return psycopg2.connect(
         dbname=os.getenv("DB_NAME", "emojidb"),
@@ -24,7 +30,7 @@ def get_db_connection():
         port=os.getenv("DB_PORT", "5432"),
     )
 
-# 🔍 Search (partial match, categories, names)
+# 🔍 Search (partial match on word/category)
 @app.get("/search")
 def search_emojis(query: str):
     conn = get_db_connection()
@@ -58,13 +64,11 @@ def get_emoji(word: str):
         "SELECT word, emoji, category FROM emojis WHERE word = %s;",
         (word.lower(),),
     )
-    result = cur.fetchall()
+    result = cur.fetchone()
     cur.close()
     conn.close()
 
-    return {
-        "results": [
-            {"word": w, "emoji": e, "category": c}
-            for w, e, c in result
-        ]
-    }
+    if result:
+        w, e, c = result
+        return {"word": w, "emoji": e, "category": c}
+    return {"error": "Emoji not found"}
