@@ -1,20 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function App() {
   const [word, setWord] = useState("");
   const [emoji, setEmoji] = useState("");
   const [error, setError] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
 
-  const searchEmoji = async () => {
-    if (!word.trim()) {
+  // Fetch suggestions as user types
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (word.trim().length < 2) {
+        setSuggestions([]);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `https://emoji-dictionary.onrender.com/search?query=${word}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        setSuggestions(data.results || []);
+      } catch (err) {
+        console.error("Suggestion error:", err);
+      }
+    };
+
+    fetchSuggestions();
+  }, [word]);
+
+  const searchEmoji = async (searchWord = word) => {
+    if (!searchWord.trim()) {
       setError("Please enter a word");
       setEmoji("");
       return;
     }
 
     try {
-      // const res = await fetch(`https://emoji-backend.onrender.com/emoji?word=${word}`);
-      const res = await fetch(`https://emoji-dictionary.onrender.com/emoji?word=${word}`);
+      const res = await fetch(
+        `https://emoji-dictionary.onrender.com/emoji?word=${searchWord}`
+      );
       if (!res.ok) throw new Error("Emoji not found");
       const data = await res.json();
       setEmoji(data.emoji || "❓");
@@ -25,30 +49,106 @@ function App() {
     }
   };
 
+  // Handle Enter key
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      searchEmoji();
+    }
+  };
+
   return (
-    <div style={{ textAlign: "center", marginTop: "50px", fontFamily: "sans-serif" }}>
+    <div
+      style={{
+        textAlign: "center",
+        marginTop: "50px",
+        fontFamily: "Arial, sans-serif",
+      }}
+    >
       <h1>Emoji Dictionary 📖</h1>
 
-      <input
-        type="text"
-        value={word}
-        onChange={(e) => setWord(e.target.value)}
-        placeholder="Enter a word"
-        style={{ padding: "10px", fontSize: "1rem", marginRight: "10px" }}
-      />
-      <button
-        onClick={searchEmoji}
-        style={{ padding: "10px 15px", fontSize: "1rem", cursor: "pointer" }}
-      >
-        Search
-      </button>
+      <div style={{ position: "relative", display: "inline-block" }}>
+        <input
+          type="text"
+          value={word}
+          onChange={(e) => setWord(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Type a word (e.g. cat, place, food)"
+          style={{
+            padding: "10px",
+            fontSize: "1rem",
+            width: "250px",
+            borderRadius: "8px",
+            border: "1px solid #ccc",
+          }}
+        />
+        <button
+          onClick={() => searchEmoji()}
+          style={{
+            padding: "10px 15px",
+            fontSize: "1rem",
+            marginLeft: "10px",
+            cursor: "pointer",
+            borderRadius: "8px",
+            border: "none",
+            backgroundColor: "#4CAF50",
+            color: "white",
+          }}
+        >
+          Search
+        </button>
+
+        {/* Suggestions dropdown */}
+        {suggestions.length > 0 && (
+          <ul
+            style={{
+              position: "absolute",
+              top: "45px",
+              left: 0,
+              right: 0,
+              background: "white",
+              border: "1px solid #ccc",
+              borderRadius: "8px",
+              maxHeight: "200px",
+              overflowY: "auto",
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              zIndex: 1000,
+            }}
+          >
+            {suggestions.map((item, idx) => (
+              <li
+                key={idx}
+                onClick={() => {
+                  setWord(item.word);
+                  searchEmoji(item.word);
+                  setSuggestions([]);
+                }}
+                style={{
+                  padding: "10px",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                }}
+                onMouseOver={(e) =>
+                  (e.currentTarget.style.background = "#f0f0f0")
+                }
+                onMouseOut={(e) =>
+                  (e.currentTarget.style.background = "white")
+                }
+              >
+                <span>{item.word}</span>
+                <span style={{ fontSize: "1.5rem" }}>{item.emoji}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       {error && <p style={{ color: "red", marginTop: "10px" }}>{error}</p>}
 
-      {emoji && (
-        <h2 style={{ fontSize: "4rem", marginTop: "20px" }}>
-          {emoji}
-        </h2>
+      {emoji && !error && (
+        <h2 style={{ fontSize: "4rem", marginTop: "20px" }}>{emoji}</h2>
       )}
     </div>
   );
