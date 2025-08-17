@@ -17,8 +17,7 @@ function App() {
     const fetchSuggestions = async () => {
       try {
         const res = await fetch(
-          // `https://emoji-dictionary.onrender.com/emoji?word=${searchWord}&category=${searchWord}`
-        `https://emoji-dictionary.onrender.com/emoji?word=${searchWord}`          
+          `https://emoji-dictionary.onrender.com/search?query=${word}`
         );
         const data = await res.json();
         setSuggestions(data.results || []);
