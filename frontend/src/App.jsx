@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 function App() {
   const [word, setWord] = useState("");
-  const [emoji, setEmoji] = useState("");
+  const [results, setResults] = useState([]);
   const [error, setError] = useState("");
   const [suggestions, setSuggestions] = useState([]);
 
@@ -30,8 +30,8 @@ function App() {
 
   const searchEmoji = async (searchWord = word) => {
     if (!searchWord.trim()) {
-      setError("Please enter a word");
-      setEmoji("");
+      setError("Please enter a word or category");
+      setResults([]);
       return;
     }
 
@@ -41,10 +41,16 @@ function App() {
       );
       if (!res.ok) throw new Error("Emoji not found");
       const data = await res.json();
-      setEmoji(data.emoji || "❓");
-      setError("");
+
+      if (data.results && data.results.length > 0) {
+        setResults(data.results);
+        setError("");
+      } else {
+        setResults([]);
+        setError("No emojis found");
+      }
     } catch (err) {
-      setEmoji("❓");
+      setResults([]);
       setError(err.message);
     }
   };
@@ -72,7 +78,7 @@ function App() {
           value={word}
           onChange={(e) => setWord(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a word (e.g. cat, place, food)"
+          placeholder="Type a word or category (e.g. cat, place, food)"
           style={{
             padding: "10px",
             fontSize: "1rem",
@@ -147,8 +153,45 @@ function App() {
 
       {error && <p style={{ color: "red", marginTop: "10px" }}>{error}</p>}
 
-      {emoji && !error && (
-        <h2 style={{ fontSize: "4rem", marginTop: "20px" }}>{emoji}</h2>
+      {/* Results */}
+      {results.length > 0 && (
+        <div
+          style={{
+            marginTop: "20px",
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: "15px",
+          }}
+        >
+          {results.map((item, idx) => (
+            <div
+              key={idx}
+              style={{
+                border: "1px solid #ccc",
+                borderRadius: "8px",
+                padding: "10px",
+                minWidth: "80px",
+                textAlign: "center",
+                boxShadow: "2px 2px 6px rgba(0,0,0,0.1)",
+              }}
+            >
+              <div style={{ fontSize: "2rem" }}>{item.emoji}</div>
+              <div style={{ marginTop: "5px", fontSize: "0.9rem" }}>
+                {item.word}
+              </div>
+              <div
+                style={{
+                  marginTop: "3px",
+                  fontSize: "0.75rem",
+                  color: "#555",
+                }}
+              >
+                {item.category}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
