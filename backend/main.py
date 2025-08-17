@@ -125,7 +125,108 @@
 
 #     return {"results": unique_results}
 
-from fastapi import FastAPI, Depends
+#/* 2nd try */
+# from fastapi import FastAPI, Depends
+# from fastapi.middleware.cors import CORSMiddleware
+# import psycopg2
+# import os
+# from urllib.parse import urlparse
+# from dotenv import load_dotenv
+
+# # Load .env file
+# load_dotenv()
+
+# app = FastAPI()
+
+# # ✅ CORS settings
+# origins = [
+#     "https://emoji-dictionary-1.onrender.com",  # frontend
+#     "https://emoji-dictionary.onrender.com",    # backend itself
+#     "http://localhost:5173",                    # local dev
+#     "*"  # <-- TEMP: allow all during dev, remove in prod
+# ]
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=origins,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# # --- Database connection ---
+# def get_db_connection():
+#     db_url = os.environ.get("DATABASE_URL")
+#     if not db_url:
+#         raise Exception("DATABASE_URL not set in environment")
+
+#     result = urlparse(db_url)
+#     return psycopg2.connect(
+#         database=result.path[1:],
+#         user=result.username,
+#         password=result.password,
+#         host=result.hostname,
+#         port=result.port
+#     )
+
+# # --- Root route ---
+# @app.get("/")
+# def home():
+#     return {"message": "API running 🚀"}
+
+# # --- Core search function (shared by both endpoints) ---
+# def search_core(queries: list[str]):
+#     conn = get_db_connection()
+#     cur = conn.cursor()
+
+#     results = []
+#     for q in queries:
+#         q = q.strip().lower().rstrip("s")
+#         if not q:
+#             continue
+
+#         q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
+#         q_joined = "_".join(q.split())     # "gatewayofindia" → "gateway_of_india"
+
+#         cur.execute("""
+#             SELECT word, emoji, category
+#             FROM emojis
+#             WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
+#                OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
+#             LIMIT 50;
+#         """, (
+#             f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
+#             f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
+#         ))
+
+#         results.extend(cur.fetchall())
+
+#     cur.close()
+#     conn.close()
+
+#     # Deduplicate
+#     seen = set()
+#     unique_results = []
+#     for r in results:
+#         if (r[0], r[1]) not in seen:
+#             seen.add((r[0], r[1]))
+#             unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
+
+#     return unique_results
+
+# # --- /search endpoint ---
+# @app.get("/search")
+# def search_emojis(query: str):
+#     queries = [q for q in query.split(",") if q.strip()]
+#     return {"results": search_core(queries)}
+
+# # --- /emoji endpoint (calls /search internally) ---
+# @app.get("/emoji")
+# def get_emoji(word: str):
+#     queries = [q for q in word.split(",") if q.strip()]
+#     return {"results": search_core(queries)}
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 import os
@@ -139,10 +240,8 @@ app = FastAPI()
 
 # ✅ CORS settings
 origins = [
-    "https://emoji-dictionary-1.onrender.com",  # frontend
-    "https://emoji-dictionary.onrender.com",    # backend itself
-    "http://localhost:5173",                    # local dev
-    "*"  # <-- TEMP: allow all during dev, remove in prod
+    "https://emoji-dictionary-1.onrender.com",  # your frontend URL
+    "http://localhost:5173",                   # optional: local dev
 ]
 
 app.add_middleware(
@@ -153,7 +252,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Database connection ---
+# Database connection function
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
@@ -161,44 +260,63 @@ def get_db_connection():
 
     result = urlparse(db_url)
     return psycopg2.connect(
-        database=result.path[1:],
+        database=result.path[1:],  # strip leading "/"
         user=result.username,
         password=result.password,
         host=result.hostname,
         port=result.port
     )
 
-# --- Root route ---
+# 🔄 Normalize query terms using DB words
+def normalize_query(q: str, conn) -> list[str]:
+    q = q.strip().lower().rstrip("s")
+    variations = {q, q.replace(" ", "_"), q.replace("_", " ")}
+
+    # Compare with all words in DB (collapsed form)
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT word FROM emojis;")
+    all_words = [row[0].lower() for row in cur.fetchall()]
+    cur.close()
+
+    collapsed_q = q.replace(" ", "").replace("_", "")
+    for w in all_words:
+        collapsed_w = w.replace(" ", "").replace("_", "")
+        if collapsed_q == collapsed_w:
+            variations.add(w)
+
+    return list(variations)
+
+# Root route
 @app.get("/")
 def home():
     return {"message": "API running 🚀"}
 
-# --- Core search function (shared by both endpoints) ---
-def search_core(queries: list[str]):
+# 🔎 Autocomplete + search endpoint
+@app.get("/search")
+def search_emojis(query: str):
+    if not query:
+        return {"results": []}
+
     conn = get_db_connection()
     cur = conn.cursor()
 
     results = []
-    for q in queries:
-        q = q.strip().lower().rstrip("s")
+    for q in query.split(","):
+        q = q.strip()
         if not q:
             continue
 
-        q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
-        q_joined = "_".join(q.split())     # "gatewayofindia" → "gateway_of_india"
+        # Normalize with DB words
+        variations = normalize_query(q, conn)
 
-        cur.execute("""
-            SELECT word, emoji, category
-            FROM emojis
-            WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
-               OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
-            LIMIT 50;
-        """, (
-            f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
-            f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
-        ))
-
-        results.extend(cur.fetchall())
+        for v in variations:
+            cur.execute("""
+                SELECT word, emoji, category
+                FROM emojis
+                WHERE word ILIKE %s OR category ILIKE %s
+                LIMIT 50;
+            """, (f"%{v}%", f"%{v}%"))
+            results.extend(cur.fetchall())
 
     cur.close()
     conn.close()
@@ -211,16 +329,9 @@ def search_core(queries: list[str]):
             seen.add((r[0], r[1]))
             unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
 
-    return unique_results
+    return {"results": unique_results}
 
-# --- /search endpoint ---
-@app.get("/search")
-def search_emojis(query: str):
-    queries = [q for q in query.split(",") if q.strip()]
-    return {"results": search_core(queries)}
-
-# --- /emoji endpoint (calls /search internally) ---
+# 🎯 Make /emoji reuse /search logic
 @app.get("/emoji")
 def get_emoji(word: str):
-    queries = [q for q in word.split(",") if q.strip()]
-    return {"results": search_core(queries)}
+    return search_emojis(word)
