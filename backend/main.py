@@ -47,40 +47,93 @@ def home():
 # Emoji lookup route (supports word OR category)
 # Emoji lookup route (supports word OR category, with normalization)
 # Emoji lookup route (Search button)
-@app.get("/emoji")
-def get_emoji(word: str):
-    conn = get_db_connection()
-    cur = conn.cursor()
+# @app.get("/emoji")
+# def get_emoji(word: str):
+#     conn = get_db_connection()
+#     cur = conn.cursor()
 
-    # Split by commas (e.g., "cat,dog")
-    queries = [q.strip().lower().rstrip("s") for q in word.split(",") if q.strip()]
-    conditions = []
-    params = []
+#     # Split by commas (e.g., "cat,dog")
+#     queries = [q.strip().lower().rstrip("s") for q in word.split(",") if q.strip()]
+#     conditions = []
+#     params = []
 
-    for q in queries:
-        q_space = q.replace(" ", "_")       # gateway of india → gateway_of_india
-        q_joined = "_".join(q.split())      # tajmahal → taj_mahal
+#     for q in queries:
+#         q_space = q.replace(" ", "_")       # gateway of india → gateway_of_india
+#         q_joined = "_".join(q.split())      # tajmahal → taj_mahal
 
-        conditions.append("(word ILIKE %s OR category ILIKE %s OR word ILIKE %s OR category ILIKE %s OR word ILIKE %s OR category ILIKE %s)")
-        params.extend([f"%{q}%", f"%{q}%", f"%{q_space}%", f"%{q_space}%", f"%{q_joined}%", f"%{q_joined}%"])
+#         conditions.append("(word ILIKE %s OR category ILIKE %s OR word ILIKE %s OR category ILIKE %s OR word ILIKE %s OR category ILIKE %s)")
+#         params.extend([f"%{q}%", f"%{q}%", f"%{q_space}%", f"%{q_space}%", f"%{q_joined}%", f"%{q_joined}%"])
 
-    sql = f"""
-        SELECT word, emoji, category
-        FROM emojis
-        WHERE {" OR ".join(conditions)}
-        LIMIT 100;
-    """
+#     sql = f"""
+#         SELECT word, emoji, category
+#         FROM emojis
+#         WHERE {" OR ".join(conditions)}
+#         LIMIT 100;
+#     """
 
-    cur.execute(sql, params)
-    results = cur.fetchall()
-    cur.close()
-    conn.close()
+#     cur.execute(sql, params)
+#     results = cur.fetchall()
+#     cur.close()
+#     conn.close()
 
-    if results:
-        return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
-    return {"error": "Not found"}
+#     if results:
+#         return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
+#     return {"error": "Not found"}
 
-# 🔎 Autocomplete search
+# # 🔎 Autocomplete search
+# @app.get("/search")
+# def search_emojis(query: str):
+#     if not query:
+#         return {"results": []}
+
+#     conn = get_db_connection()
+#     cur = conn.cursor()
+
+#     # Split by comma, strip spaces/plurals
+#     queries = [q.strip().lower().rstrip("s") for q in query.split(",")]
+
+#     results = []
+#     for q in queries:
+#         # Normalize variations
+#         q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
+#         q_joined = "_".join(q.split())     # "chainbridge" → "chain_bridge"
+
+#         # Try multiple match patterns
+#         cur.execute("""
+#             SELECT word, emoji, category
+#             FROM emojis
+#             WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
+#                OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
+#             LIMIT 50;
+#         """, (
+#             f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
+#             f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
+#         ))
+
+#         results.extend(cur.fetchall())
+
+#     cur.close()
+#     conn.close()
+
+#     # Deduplicate
+#     seen = set()
+#     unique_results = []
+#     for r in results:
+#         if (r[0], r[1]) not in seen:
+#             seen.add((r[0], r[1]))
+#             unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
+
+#     return {"results": unique_results}
+
+# 🔎 Normalization helper
+def normalize_query(q: str) -> str:
+    q = q.lower().strip()
+    q = q.replace(",", " ")          # treat commas like spaces
+    q = re.sub(r"[\s_]+", " ", q)    # collapse multiple spaces/underscores
+    q = q.rstrip("s")                # handle plurals
+    return q
+
+# 🔎 Autocomplete + search (master function)
 @app.get("/search")
 def search_emojis(query: str):
     if not query:
@@ -89,38 +142,37 @@ def search_emojis(query: str):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Split by comma, strip spaces/plurals
-    queries = [q.strip().lower().rstrip("s") for q in query.split(",")]
+    # Split queries like "cat, dog" or "taj mahal"
+    raw_terms = re.split(r"[,\s]+", query)
+    terms = [normalize_query(t) for t in raw_terms if t]
 
-    results = []
-    for q in queries:
-        # Normalize variations
-        q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
-        q_joined = "_".join(q.split())     # "chainbridge" → "chain_bridge"
+    if not terms:
+        return {"results": []}
 
-        # Try multiple match patterns
-        cur.execute("""
-            SELECT word, emoji, category
-            FROM emojis
-            WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
-               OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
-            LIMIT 50;
-        """, (
-            f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
-            f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
-        ))
+    # Build SQL dynamically with ORs
+    like_patterns = [f"%{t}%" for t in terms]
+    placeholders = ", ".join(["%s"] * len(like_patterns))
 
-        results.extend(cur.fetchall())
+    sql = f"""
+        SELECT word, emoji, category
+        FROM emojis
+        WHERE {" OR ".join(["word ILIKE %s OR category ILIKE %s" for _ in terms])}
+        LIMIT 50;
+    """
+
+    params = []
+    for p in like_patterns:
+        params.extend([p, p])
+
+    cur.execute(sql, tuple(params))
+    results = cur.fetchall()
 
     cur.close()
     conn.close()
 
-    # Deduplicate
-    seen = set()
-    unique_results = []
-    for r in results:
-        if (r[0], r[1]) not in seen:
-            seen.add((r[0], r[1]))
-            unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
+    return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
 
-    return {"results": unique_results}
+# ✅ /emoji now reuses /search
+@app.get("/emoji")
+def get_emoji(word: str):
+    return search_emojis(word)
