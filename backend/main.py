@@ -47,27 +47,37 @@ def home():
 # Emoji lookup route (supports word OR category)
 @app.get("/emoji")
 def get_emoji(word: str):
+    if not word:
+        return {"results": []}
+
     conn = get_db_connection()
     cur = conn.cursor()
 
     # Normalize input
-    singular = word.lower().rstrip("s")
-    normalized = singular.replace(" ", "_")
+    queries = [q.strip().lower().rstrip("s").replace(" ", "_") for q in word.split(",")]
 
-    # First: try exact word match
-    cur.execute("SELECT word, emoji, category FROM emojis WHERE word = %s;", (normalized,))
-    results = cur.fetchall()
-
-    # If no direct word found → check if it's a category
-    if not results:
-        cur.execute("SELECT word, emoji, category FROM emojis WHERE category = %s;", (normalized,))
-        results = cur.fetchall()
+    results = []
+    for q in queries:
+        cur.execute("""
+            SELECT word, emoji, category
+            FROM emojis
+            WHERE word ILIKE %s OR category ILIKE %s;
+        """, (f"%{q}%", f"%{q}%"))
+        results.extend(cur.fetchall())
 
     cur.close()
     conn.close()
-    
-    if results:
-        return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
+
+    # Deduplicate results
+    seen = set()
+    unique_results = []
+    for r in results:
+        if (r[0], r[1]) not in seen:
+            seen.add((r[0], r[1]))
+            unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
+
+    if unique_results:
+        return {"results": unique_results}
     return {"error": "Not found"}
 
 # 🔎 Autocomplete search
