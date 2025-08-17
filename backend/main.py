@@ -57,3 +57,29 @@ def get_emoji(word: str):
     if result:
         return {"word": word, "emoji": result[0]}
     return {"error": "Not found"}
+
+# 🔎 Autocomplete search
+@app.get("/search")
+def search_emojis(query: str):
+    if not query:
+        return {"results": []}
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Handle plurals (simple heuristic: strip trailing 's')
+    singular = query.lower().rstrip("s")
+
+    # Match words or categories
+    cur.execute("""
+        SELECT word, emoji, category
+        FROM emojis
+        WHERE word ILIKE %s OR category ILIKE %s
+        LIMIT 20;
+    """, (f"%{singular}%", f"%{singular}%"))
+    
+    results = cur.fetchall()
+    cur.close()
+    conn.close()
+
+    return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
