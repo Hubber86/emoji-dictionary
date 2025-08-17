@@ -1,3 +1,4 @@
+# working but not when words combined together
 # from fastapi import FastAPI
 # from fastapi.middleware.cors import CORSMiddleware
 # import psycopg2
@@ -125,7 +126,7 @@
 
 #     return {"results": unique_results}
 
-#/* 2nd try */
+#/* 2nd try */# working but not when words combined together
 # from fastapi import FastAPI, Depends
 # from fastapi.middleware.cors import CORSMiddleware
 # import psycopg2
