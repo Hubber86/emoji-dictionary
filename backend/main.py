@@ -8,6 +8,7 @@ app = FastAPI()
 # ✅ Allowed frontend origins
 origins = [
     "https://emoji-dictionary-1.onrender.com",  # deployed frontend
+    "https://emoji-dictionary.onrender.com",
     "http://localhost:5173",                    # local dev
 ]
 
