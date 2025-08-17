@@ -89,38 +89,38 @@ def search_emojis(query: str):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Split by comma/space → handle multiple queries
-    terms = [t.strip().lower() for t in query.replace("_", " ").split(",") if t.strip()]
+    # Split by comma, strip spaces/plurals
+    queries = [q.strip().lower().rstrip("s") for q in query.split(",")]
+
     results = []
+    for q in queries:
+        # Normalize variations
+        q_space = q.replace(" ", "_")      # "gateway of india" → "gateway_of_india"
+        q_joined = "_".join(q.split())     # "chainbridge" → "chain_bridge"
 
-    for term in terms:
-        # Normalize: remove spaces for looser match
-        normalized = term.replace(" ", "")
-
-        # Handle plurals: strip "s" or "es"
-        if normalized.endswith("es"):
-            singular = normalized[:-2]
-        elif normalized.endswith("s"):
-            singular = normalized[:-1]
-        else:
-            singular = normalized
-
+        # Try multiple match patterns
         cur.execute("""
             SELECT word, emoji, category
             FROM emojis
-            WHERE REPLACE(word, ' ', '') ILIKE %s
-               OR REPLACE(word, '_', '') ILIKE %s
-               OR REPLACE(category, ' ', '') ILIKE %s
-               OR REPLACE(category, '_', '') ILIKE %s
+            WHERE word ILIKE %s OR word ILIKE %s OR word ILIKE %s
+               OR category ILIKE %s OR category ILIKE %s OR category ILIKE %s
             LIMIT 50;
-        """, (f"%{singular}%", f"%{singular}%", f"%{singular}%", f"%{singular}%"))
+        """, (
+            f"%{q}%", f"%{q_space}%", f"%{q_joined}%",
+            f"%{q}%", f"%{q_space}%", f"%{q_joined}%"
+        ))
 
-        rows = cur.fetchall()
-        for r in rows:
-            result_obj = {"word": r[0], "emoji": r[1], "category": r[2]}
-            if result_obj not in results:  # dedupe
-                results.append(result_obj)
+        results.extend(cur.fetchall())
 
     cur.close()
     conn.close()
-    return {"results": results}
+
+    # Deduplicate
+    seen = set()
+    unique_results = []
+    for r in results:
+        if (r[0], r[1]) not in seen:
+            seen.add((r[0], r[1]))
+            unique_results.append({"word": r[0], "emoji": r[1], "category": r[2]})
+
+    return {"results": unique_results}
