@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 
 function App() {
   const [word, setWord] = useState("");
-  const [emoji, setEmoji] = useState("");
   const [error, setError] = useState("");
   const [suggestions, setSuggestions] = useState([]);
+  const [results, setResults] = useState([]);
   const [highlightIndex, setHighlightIndex] = useState(-1);
 
-  // Fetch suggestions dynamically
+  // Fetch live suggestions as user types
   useEffect(() => {
     if (word.trim().length === 0) {
       setSuggestions([]);
@@ -28,31 +28,39 @@ function App() {
 
     fetchSuggestions();
   }, [word]);
-  
+
+  // Search emoji based on word or category
   const searchEmoji = async (searchWord = word) => {
     if (!searchWord.trim()) {
       setError("Please enter a word");
-      setEmoji("");
+      setResults([]);
       return;
     }
 
     try {
-      // const res = await fetch(`https://emoji-backend.onrender.com/emoji?word=${word}`);      
       const res = await fetch(
         `https://emoji-dictionary.onrender.com/emoji?word=${searchWord}`
       );
       if (!res.ok) throw new Error("Emoji not found");
       const data = await res.json();
-      setEmoji(data.emoji || "❓");
-      setError("");
+      if (data.results && data.results.length > 0) {
+        setResults(data.results);
+        setError("");
+      } else if (data.emoji) {
+        setResults([{ emoji: data.emoji, word: searchWord }]);
+        setError("");
+      } else {
+        setResults([]);
+        setError("Not found");
+      }
       setSuggestions([]);
     } catch (err) {
-      setEmoji("❓");
+      setResults([]);
       setError(err.message);
     }
   };
 
-  // Handle keyboard navigation
+  // Keyboard navigation
   const handleKeyDown = (e) => {
     if (e.key === "ArrowDown") {
       setHighlightIndex((prev) => (prev + 1) % suggestions.length);
@@ -70,7 +78,7 @@ function App() {
       }
     }
   };
-  
+
   return (
     <div
       style={{
@@ -84,9 +92,12 @@ function App() {
       <input
         type="text"
         value={word}
-        onChange={(e) => setWord(e.target.value)}
+        onChange={(e) => {
+          setWord(e.target.value);
+          setHighlightIndex(-1);
+        }}
         onKeyDown={handleKeyDown}
-        placeholder="Enter a word"
+        placeholder="Enter a word or category"
         style={{ padding: "10px", fontSize: "1rem", marginRight: "10px" }}
       />
       <button
@@ -137,10 +148,42 @@ function App() {
         </div>
       )}
 
+      {/* Error */}
       {error && <p style={{ color: "red", marginTop: "10px" }}>{error}</p>}
 
-      {emoji && (
-        <h2 style={{ fontSize: "4rem", marginTop: "20px" }}>{emoji}</h2>
+      {/* Search Results */}
+      {results.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            gap: "10px",
+            marginTop: "30px",
+            maxWidth: "600px",
+            marginLeft: "auto",
+            marginRight: "auto",
+          }}
+        >
+          {results.map((r, idx) => (
+            <div
+              key={idx}
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: "8px",
+                padding: "10px",
+                background: "white",
+              }}
+            >
+              <span style={{ fontSize: "2rem" }}>{r.emoji}</span>
+              <p style={{ margin: "5px 0 0", fontSize: "0.9rem" }}>{r.word}</p>
+              {r.category && (
+                <p style={{ margin: 0, fontSize: "0.75rem", color: "gray" }}>
+                  {r.category}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
