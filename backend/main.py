@@ -50,16 +50,17 @@ def get_emoji(word: str):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Lowercase + simple plural stripping
+    # Normalize input
     singular = word.lower().rstrip("s")
+    normalized = singular.replace(" ", "_")
 
     # First: try exact word match
-    cur.execute("SELECT word, emoji, category FROM emojis WHERE word = %s;", (singular,))
+    cur.execute("SELECT word, emoji, category FROM emojis WHERE word = %s;", (normalized,))
     results = cur.fetchall()
 
     # If no direct word found → check if it's a category
     if not results:
-        cur.execute("SELECT word, emoji, category FROM emojis WHERE category = %s;", (singular,))
+        cur.execute("SELECT word, emoji, category FROM emojis WHERE category = %s;", (normalized,))
         results = cur.fetchall()
 
     cur.close()
