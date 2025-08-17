@@ -44,18 +44,29 @@ def get_db_connection():
 def home():
     return {"message": "API running 🚀"}
 
-# Emoji lookup route
+# Emoji lookup route (supports word OR category)
 @app.get("/emoji")
 def get_emoji(word: str):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT emoji FROM emojis WHERE word = %s;", (word.lower(),))
-    result = cur.fetchone()
+
+    # Lowercase + simple plural stripping
+    singular = word.lower().rstrip("s")
+
+    # First: try exact word match
+    cur.execute("SELECT word, emoji, category FROM emojis WHERE word = %s;", (singular,))
+    results = cur.fetchall()
+
+    # If no direct word found → check if it's a category
+    if not results:
+        cur.execute("SELECT word, emoji, category FROM emojis WHERE category = %s;", (singular,))
+        results = cur.fetchall()
+
     cur.close()
     conn.close()
     
-    if result:
-        return {"word": word, "emoji": result[0]}
+    if results:
+        return {"results": [{"word": r[0], "emoji": r[1], "category": r[2]} for r in results]}
     return {"error": "Not found"}
 
 # 🔎 Autocomplete search
