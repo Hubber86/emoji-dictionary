@@ -314,8 +314,8 @@ def search_emojis(query: str):
             cur.execute("""
                 SELECT word, emoji, category
                 FROM emojis
-                WHERE word ILIKE %s OR category ILIKE %s
-                LIMIT 50;
+                WHERE word ILIKE %s OR category ILIKE %s ;
+               -- LIMIT 50;
             """, (f"%{v}%", f"%{v}%"))
             results.extend(cur.fetchall())
 
