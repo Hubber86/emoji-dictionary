@@ -271,17 +271,27 @@ def get_db_connection():
 # 🔄 Normalize query terms using DB words
 def normalize_query(q: str, conn) -> list[str]:
     q = q.strip().lower().rstrip("s")
-    variations = {q, q.replace(" ", "_"), q.replace("_", " ")}
+    # Base variations (handle space, underscore, hyphen)
+    variations = {
+        q,
+        q.replace(" ", "_"),     # "two hump camel" → "two_hump_camel"
+        q.replace("-", "_"),     # "two-hump camel" → "two_hump_camel"
+        q.replace("-", " "),     # "two-hump camel" → "two hump camel"
+        q.replace("_", " "),     # "two_hump_camel" → "two hump camel"
+        q.replace(" ", ""),      # "two hump camel" → "twohumpcamel"
+        q.replace("-", ""),      # "two-hump camel" → "twohumpcamel"
+        q.replace("_", ""),      # "two_hump_camel" → "twohumpcamel"
+    }
 
-    # Compare with all words in DB (collapsed form)
+    # Compare with all words in DB (collapsed form: remove space/underscore/hyphen)
     cur = conn.cursor()
     cur.execute("SELECT DISTINCT word FROM emojis;")
     all_words = [row[0].lower() for row in cur.fetchall()]
     cur.close()
 
-    collapsed_q = q.replace(" ", "").replace("_", "")
+    collapsed_q = q.replace(" ", "").replace("_", "").replace("-", "")
     for w in all_words:
-        collapsed_w = w.replace(" ", "").replace("_", "")
+        collapsed_w = w.replace(" ", "").replace("_", "").replace("-", "")
         if collapsed_q == collapsed_w:
             variations.add(w)
 
